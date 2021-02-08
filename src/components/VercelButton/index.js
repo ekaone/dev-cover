@@ -4,7 +4,7 @@ import { ButtonContainer, StyledButton } from './styles';
 
 const VercelButton = () => {
   const deployUrl = 'https://vercel.com/new/git/external?repository-url=';
-  const repository = 'https%3A%2F%2Fgithub.com%2Fjrgarciadev%2Fdev-cover';
+  const repository = 'https%3A%2F%2Fgithub.com%2Fjrgarciadev%2Fdev-cover%2Ftree%2Fmain';
   const variables = `&env=NEXT_PUBLIC_USERNAME`;
   const projectName = '&project-name=my-awesome-portfolio';
   const repositoryName = '&repository-name=my-awesome-portfolio';
