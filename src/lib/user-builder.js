@@ -1,30 +1,52 @@
 import { initializeApollo } from '@lib/apollo-client';
 import { GET_USER_BY_USERNAME } from '@graphql/queries/hashnode/user';
-import { cleanAttrs, getStringByCriteria, cleanGithubUrl } from '@utils';
-import { getGithubReadmeURL, getNameUser } from '@utils/user-mapping';
-import { get, chunk, first, orderBy, size, includes, isEmpty } from 'lodash';
-import fetchAPI from './fetch-api';
+import {
+  cleanAttrs,
+  getStringByCriteria,
+  selectFirstWithValue,
+  areSimilarStrings,
+  cleanGithubUrl,
+  mapArrayOrder,
+  toLowerCase,
+} from '@utils';
+import {
+  getGithubReadmeURL,
+  getNameUser,
+  getHashnodePubDomain,
+  getAvatar,
+  getKeysMapped,
+  extractSocialNetworks,
+  getUserFavicon,
+} from '@utils/user-mapping';
+import { get, map, chunk, first, orderBy, union, size, includes, isEmpty, truncate } from 'lodash';
+import { updateUser, upsertUser } from '@services/user';
 import {
   GITHUB_API_URL,
   GITHUB_USER_URL,
   API_URL,
   DEVTO_USER_URL,
   DEVTO_ARTICLES_URL,
-  IS_GENERATOR,
+  IS_PORTFOLIO,
 } from './constants';
 
-const stringSimilarity = require('string-similarity');
-
-const usrname = process.env.NEXT_PUBLIC_USERNAME;
-const isLivePortfolio = usrname && !IS_GENERATOR;
-
 const fetchUserReadme = async (username) => {
+  const branches = ['main', 'master'];
+  const names = ['README.md', 'Readme.md', 'readme.md'];
+  let readmeFound = false;
+  let githubReadmeData = null;
   try {
-    let githubReadmeRes = await fetch(getGithubReadmeURL(username, 'main'));
-    let githubReadmeData = await githubReadmeRes.text();
-    if (githubReadmeData.includes('404')) {
-      githubReadmeRes = await fetch(getGithubReadmeURL(username, 'master'));
-      githubReadmeData = await githubReadmeRes.text();
+    // eslint-disable-next-line no-restricted-syntax
+    for (const branch of branches) {
+      // eslint-disable-next-line no-restricted-syntax
+      for (const fileName of names) {
+        if (!readmeFound) {
+          // eslint-disable-next-line no-await-in-loop
+          const githubReadmeRes = await fetch(getGithubReadmeURL(username, branch, fileName));
+          // eslint-disable-next-line no-await-in-loop
+          githubReadmeData = await githubReadmeRes.text();
+          readmeFound = !githubReadmeData.includes('404');
+        }
+      }
     }
     return githubReadmeData;
   } catch (error) {
@@ -53,74 +75,98 @@ const buildPosts = async (user) => {
   if (user.hasDevto) {
     devtoPosts = await fetchDevtoPosts(user.username);
     if (devtoPosts.length > 0) {
-      devtoPosts = first(chunk(orderBy(devtoPosts, ['positive_reactions_count'], ['desc']), 4));
+      devtoPosts = map(
+        first(chunk(orderBy(devtoPosts, ['positive_reactions_count'], ['desc']), 4)),
+        (post) => {
+          return {
+            provider: 'devto',
+            id: post.id,
+            title: post.title || '',
+            url: post.url || '#',
+            cover: post.cover_image || '',
+            likes: post.positive_reactions_count || 0,
+            description: post.description || '',
+            comments: post.comments_count || 0,
+            created: post.published_timestamp || '',
+          };
+        },
+      );
     }
   }
+
   if (user.hasHashnode) {
-    hashnodePosts = first(
-      chunk(orderBy(user.hashnode.publication.posts, ['totalReactions'], ['desc']), 4),
+    hashnodePosts = map(
+      first(chunk(orderBy(user.hashnode.publication.posts, ['totalReactions'], ['desc']), 4)),
+      (post) => {
+        return {
+          provider: 'hashnode',
+          id: post._id,
+          title: post.title || '',
+          slug: post.slug || '',
+          url: post.url || getHashnodePubDomain(user, post.slug) || '#',
+          cover: post.coverImage || '',
+          likes: post.totalReactions || 0,
+          description: post.brief || '',
+          comments: post.replyCount + post.responseCount || 0,
+          featured: !isEmpty(post.dateFeatured),
+          created: post.dateAdded || '',
+        };
+      },
     );
   }
   if (hashnodePosts.length > 0 && devtoPosts.length > 0) {
     if (devtoPosts.length > hashnodePosts.length) {
       devtoPosts.forEach((post) => {
         hashnodePosts.forEach((hnPost) => {
-          const similar = stringSimilarity.compareTwoStrings(hnPost.title, post.title) > 0.8;
+          const similar = areSimilarStrings(hnPost.title, post.title);
           if (similar) {
-            hashnodePosts = hashnodePosts.filter((p) => p._id !== hnPost._id);
+            hashnodePosts = hashnodePosts.filter((p) => p.id !== hnPost.id);
           }
         });
       });
-      return {
-        hashnode: hashnodePosts,
-        devto: devtoPosts,
-      };
-    }
-    hashnodePosts.forEach((hnPost) => {
-      devtoPosts.forEach((post) => {
-        const similar = stringSimilarity.compareTwoStrings(hnPost.title, post.title) > 0.8;
-        if (similar) {
-          devtoPosts = devtoPosts.filter((p) => p.id !== post.id);
-        }
+    } else {
+      hashnodePosts.forEach((hnPost) => {
+        devtoPosts.forEach((post) => {
+          const similar = areSimilarStrings(hnPost.title, post.title);
+          if (similar) {
+            devtoPosts = devtoPosts.filter((p) => p.id !== post.id);
+          }
+        });
       });
-    });
-
-    return {
-      hashnode: hashnodePosts,
-      devto: devtoPosts,
-    };
+    }
+    return mapArrayOrder(union(devtoPosts, hashnodePosts));
   }
   if (hashnodePosts.length > 0) {
-    return {
-      hashnode: hashnodePosts,
-    };
+    return mapArrayOrder(hashnodePosts);
   }
   if (devtoPosts.length > 0) {
-    return {
-      devto: devtoPosts,
-    };
+    return mapArrayOrder(devtoPosts);
   }
-  return null;
+  return [];
 };
 
-const getReposData = async (username) => {
+export const getReposData = async (username) => {
   try {
     const response = await fetch(`${GITHUB_USER_URL}${username}/repos?per_page=100`);
     if (response.status === 404 || response.status === 403) {
       return [];
     }
     const repos = await response.json();
-    return repos;
+    const orderedRepos = orderBy(repos, ['stargazers_count'], ['desc']);
+    return orderedRepos;
   } catch (error) {
     console.error(error);
     return [];
   }
 };
 
-const getIsGithubRateLimited = async () => {
+export const getIsGithubRateLimited = async (showLimit = false) => {
   try {
     const response = await fetch(`${GITHUB_API_URL}/rate_limit`);
     const limit = await response.json();
+    if (showLimit) {
+      return limit;
+    }
     if (limit.resources.core.remaining < 1) {
       return true;
     }
@@ -132,7 +178,7 @@ const getIsGithubRateLimited = async () => {
 
 const getDevcoverUserData = async (username) => {
   try {
-    const response = await fetch(`${API_URL}user/${username}`);
+    const response = await fetch(`${API_URL}/user/${username}`);
     if (response.status === 404 || response.status === 403) {
       return null;
     }
@@ -148,39 +194,89 @@ const getDevcoverUserData = async (username) => {
   }
 };
 
-const markAsActivePortfoio = (user) => {
+const markAsActivePortfoio = async (user) => {
   const input = {
-    username: user.username,
-    name: user.name,
-    email: user.email,
-    shortBio: user.shortBio,
-    largeBio: user.largeBio,
-    ga: user.ga,
-    isHireable: user.isHireable,
     portfolioActive: true,
-    primaryColor: user.primaryColor,
   };
-  fetchAPI(`/user/${user.username}`, {
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-    },
-    method: 'POST',
-    body: JSON.stringify(input),
-    throwOnHTTPError: true,
-  })
-    .then((res) => {
-      if (res.success) {
-        console.log('User updated');
-      }
-    })
-    .catch((err) => {
-      console.error(err);
-    });
+  await updateUser(get(user, 'username'), input);
+};
+
+const applyValidations = (user) => {
+  const githubName = get(user, 'github.name');
+  const devtoName = get(user, 'devto.name');
+  const hashnodeName = get(user, 'hashnode.name');
+  if (!isEmpty(githubName) && !isEmpty(devtoName) && !areSimilarStrings(githubName, devtoName)) {
+    // eslint-disable-next-line no-param-reassign
+    delete user.devto;
+  }
+  if (
+    !isEmpty(githubName) &&
+    !isEmpty(hashnodeName) &&
+    !areSimilarStrings(githubName, hashnodeName, 0.5)
+  ) {
+    // eslint-disable-next-line no-param-reassign
+    delete user.hashnode;
+  }
+  return user;
+};
+
+const getDevcoverUser = async (username, baseUser = {}, userBioArray = [], isPreview = false) => {
+  const user = { ...baseUser };
+  const userData = await getDevcoverUserData(username);
+  user.primaryColor = get(userData, 'primaryColor', null);
+  user.avatar = isPreview ? getAvatar(userData) : getAvatar(user);
+  user.favicon = isPreview ? get(userData, 'favicon') : getUserFavicon(user);
+  user.name = get(userData, 'name') || getNameUser(user) || '';
+  user.readme = get(userData, 'readme', get(user, 'github.readme', ''));
+  user.email = get(userData, 'email', null);
+  user.username = toLowerCase(username);
+  user.ga = get(userData, 'ga', null);
+  user.repos = selectFirstWithValue(get(userData, 'repos'), get(user, 'github.repos', []));
+  user.shortBio =
+    truncate(get(userData, 'shortBio', getStringByCriteria(userBioArray, 'shortest')), {
+      length: 120,
+    }) || '';
+  user.largeBio = get(userData, 'largeBio', getStringByCriteria(userBioArray)) || '';
+  user.hasGithub = isPreview
+    ? get(userData, 'hasGithub', false)
+    : !isEmpty(get(user, 'github.login'));
+  user.hasRepos = size(user.repos) > 0;
+  user.hasHashnode = isPreview
+    ? get(userData, 'hasHashnode', false)
+    : !isEmpty(get(user, 'hashnode.name'));
+  user.hasDevto = isPreview
+    ? get(userData, 'hasDevto', false)
+    : !isEmpty(get(user, 'devto.username'));
+  user.hasReadme =
+    !isEmpty(get(user, 'readme')) &&
+    !includes(get(user, 'readme'), 'Invalid') &&
+    !includes(get(user, 'readme'), '404');
+  user.showAbout = get(userData, 'showAbout', user.hasReadme);
+  user.showRepos = get(userData, 'showRepos', user.hasRepos);
+  user.links = isPreview ? get(userData, 'links') : getKeysMapped(extractSocialNetworks(user));
+  try {
+    if (IS_PORTFOLIO || isPreview) {
+      user.posts = get(userData, 'posts');
+    } else {
+      user.posts = await buildPosts(user);
+    }
+    user.hasPosts = user.posts && user.posts.length > 0;
+    user.showBlog = get(userData, 'showBlog', user.hasPosts);
+  } catch (error) {
+    console.error(error);
+    user.hasPosts = false;
+    user.posts = null;
+  }
+  if (IS_PORTFOLIO || isPreview) {
+    await markAsActivePortfoio(user);
+  } else {
+    await upsertUser(cleanAttrs(user, ['github', 'hashnode', 'devto']));
+  }
+  return user;
 };
 
 const fullfillUser = async ({ username, github = {}, hashnode = {}, devto = {} }) => {
-  const user = {
+  let user = {
     github,
     hashnode,
     devto,
@@ -194,9 +290,9 @@ const fullfillUser = async ({ username, github = {}, hashnode = {}, devto = {} }
     }
     user.github.login = githubUsername;
   }
-  if (user.github.login) {
+  if (get(user, 'github.login')) {
     if (
-      get(hashnode, 'socialMedia.github') !== user.github.login &&
+      get(hashnode, 'socialMedia.github') !== get(user, 'github.login') &&
       !isEmpty(get(hashnode, 'socialMedia.github'))
     ) {
       user.github.login = cleanGithubUrl(get(hashnode, 'socialMedia.github'));
@@ -210,45 +306,30 @@ const fullfillUser = async ({ username, github = {}, hashnode = {}, devto = {} }
     user.github.limited = githubLimited;
     user.github.readme = githubReadmeData;
     user.github.repos = githubReposData;
-    user.hasRepos = size(githubReposData) > 0;
   }
+
+  user = applyValidations(user);
+
   const userBioArray = [
     get(user, 'devto.summary'),
     get(user, 'github.bio'),
     get(user, 'hashnode.tagline'),
   ];
-  const userData = await getDevcoverUserData(username);
-  user.primaryColor = get(userData, 'primaryColor') || null;
-  user.name = get(userData, 'name') || getNameUser(user) || '';
-  user.email = get(userData, 'email') || null;
-  user.username = username;
-  user.ga = get(userData, 'ga') || null;
-  user.shortBio = get(userData, 'shortBio') || getStringByCriteria(userBioArray, 'shortest') || '';
-  user.largeBio = get(userData, 'largeBio') || getStringByCriteria(userBioArray) || '';
-  user.hasGithub = !isEmpty(get(user, 'github.login'));
-  user.hasHashnode = !isEmpty(user, 'hashnode.name');
-  user.hasDevto = get(user, 'devto.status') !== 404;
-  user.hasReadme =
-    !isEmpty(user, 'github.readme') &&
-    !includes(get(user, 'github.readme'), 'Invalid') &&
-    !includes(get(user, 'github.readme'), '404');
-  if (isLivePortfolio) {
-    markAsActivePortfoio(user);
-  }
-  try {
-    user.posts = await buildPosts(user);
-    user.hasPosts = user.posts && (user.posts.hashnode.length > 0 || user.posts.devto.length > 0);
-  } catch (error) {
-    console.error(error);
-    user.hasPosts = false;
-    user.posts = null;
-  }
-  return user;
+
+  const userData = await getDevcoverUser(username, user, userBioArray);
+  return userData;
 };
 
 const buildUser = async (params) => {
   const apolloClient = initializeApollo();
-  const { username } = params;
+  let user = {};
+  const { username, isPreview = false } = params;
+
+  if (isPreview) {
+    user = await getDevcoverUser(username, {}, [], true);
+    return user;
+  }
+
   const githubUserResponse = await fetch(`${GITHUB_USER_URL}${username}`);
   const githubUserRes = await githubUserResponse.json();
   const devtoUserResponse = await fetch(`${DEVTO_USER_URL}${username}`);
@@ -262,7 +343,7 @@ const buildUser = async (params) => {
   const githubUser = cleanAttrs(githubUserRes);
   const hashnodeUser = cleanAttrs(hnUserData.user);
   const devtoUser = cleanAttrs(devtoUserRes);
-  const user = await fullfillUser({
+  user = await fullfillUser({
     username,
     github: githubUser,
     hashnode: hashnodeUser,

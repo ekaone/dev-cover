@@ -18,7 +18,13 @@ module.exports = {
     },
     minLength: {
       value: 3,
-      message: `This field must have at least 10 characters`,
+      message: `This field must have at least 3 characters`,
+    },
+  },
+  readme: {
+    minLength: {
+      value: 3,
+      message: `This field must have at least 3 characters`,
     },
   },
   largeBio: {
@@ -30,6 +36,17 @@ module.exports = {
     minLength: {
       value: 10,
       message: `This field must have at least 10 characters`,
+    },
+  },
+  username: {
+    required,
+    minLength: {
+      value: 3,
+      message: `This field must have at least 3 characters`,
+    },
+    pattern: {
+      value: /^[a-z0-9_-]{3,26}$/i,
+      message: 'Invalid username',
     },
   },
   email: {
@@ -46,17 +63,6 @@ module.exports = {
     maxLength: {
       value: 120,
       message: 'Maximum length allowed',
-    },
-  },
-  password: {
-    required,
-    maxLength: {
-      value: 64,
-      message: 'Maximum length allowed',
-    },
-    minLength: {
-      value: 6,
-      message: `This field must have at least 6 characters`,
     },
   },
 };

@@ -54,7 +54,6 @@ export const StyledNav = styled.nav`
   font-family: ${(props) => props.theme.fontFamily.fontMono};
   counter-reset: item 0;
   z-index: 12;
-
   .logo {
     ${({ theme }) => theme.mixins.flexCenter};
     cursor: pointer;
@@ -138,9 +137,14 @@ export const StyledLinks = styled.div`
     }
   }
 
-  .resume-button {
+  .preview-button {
     ${({ theme }) => theme.mixins.smallButton};
+    display: flex;
+    align-items: center;
     margin-left: 15px;
     font-size: ${(props) => props.theme.fontSize.sm};
+    svg {
+      margin-right: 1rem;
+    }
   }
 `;

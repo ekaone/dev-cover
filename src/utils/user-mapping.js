@@ -44,16 +44,13 @@ export const getNavLinks = (user) => {
     projects: '',
     contact: '',
   };
-  if (
-    (user?.posts && user.posts.hashnode && user.posts.hashnode.length > 0) ||
-    (user?.posts && user.posts.devto && user.posts.devto.length > 0)
-  ) {
+  if (user?.posts && user?.showBlog && user.posts.length > 0) {
     navLinks.blog = IS_GENERATOR ? `/portfolio/${user?.username}#blog` : '#blog';
   }
-  if (user?.hasReadme && user?.hasGithub && user?.username) {
+  if (user?.hasReadme && user?.showAbout && user?.username) {
     navLinks.about = IS_GENERATOR ? `/portfolio/${user?.username}#about` : '#about';
   }
-  if (user?.hasRepos) {
+  if (user?.hasRepos && user?.showRepos) {
     navLinks.projects = IS_GENERATOR ? `/portfolio/${user?.username}#projects` : '#projects';
   }
   if (!isEmpty(user.email) || user.isHireable) {
@@ -62,9 +59,29 @@ export const getNavLinks = (user) => {
   return navLinks;
 };
 
+export const getHeroLink = (user) => {
+  if (!isEmpty(get(user, 'username'))) {
+    return IS_GENERATOR ? `/portfolio/${user?.username}#hero` : '#hero';
+  }
+  return '/';
+};
+
 export const getNameUser = (user) => {
   if (!user) return '';
   return user?.github?.name || user?.hashnode?.name || user?.devto?.name;
+};
+
+export const getAvatar = (user) => {
+  if (!user) return '';
+  return get(
+    user,
+    'avatar',
+    get(
+      user,
+      'github.avatar_url',
+      get(user, 'hashnode.photo', get(user, 'devto.profile_image', '/default-avatar.png')),
+    ),
+  );
 };
 
 export const isEnabledUser = (user) => {
@@ -98,8 +115,8 @@ export const purgeUserReadme = (readme) => {
   return container.innerHTML;
 };
 
-export const getGithubReadmeURL = (username, branch = 'main') => {
-  return `${GITHUB_README_URL}${username}/${username}/${branch}/README.md`;
+export const getGithubReadmeURL = (username, branch = 'main', fileName = 'README.md') => {
+  return `${GITHUB_README_URL}${username}/${username}/${branch}/${fileName}`;
 };
 
 export const getUserFavicon = (user) => {
@@ -133,7 +150,7 @@ export const getHeadData = ({ isPortfolio, user }) => {
   if (!isEmpty(user) && isPortfolio) {
     const userImage =
       user?.github?.avatar_url || user?.hashnode?.photo || user?.devto?.profile_image;
-    const userIcon = getUserFavicon(user);
+    const userIcon = user.favicon || getUserFavicon(user);
     const userTitle = `${user.name} ${user.shortBio && `| ${user.shortBio}`}`;
     head.title = userTitle;
     head.icon = userIcon;
@@ -151,4 +168,11 @@ export const getHeadData = ({ isPortfolio, user }) => {
     head.keywords = '';
   }
   return head;
+};
+
+export const getHashnodePubDomain = (user, slug = '') => {
+  if (!isEmpty(get(user, 'hashnode.publicationDomain'))) {
+    return `https://${user?.hashnode?.publicationDomain}/${slug}`;
+  }
+  return `https://${get(user, 'username')}.hashnode.dev/${slug}`;
 };

@@ -1,4 +1,5 @@
 import PropTypes from 'prop-types';
+import { getAvatar } from '@utils/user-mapping';
 import Social from '../Social';
 import {
   StyledHeroSection,
@@ -10,7 +11,7 @@ import {
 
 const Hero = ({ user = {} }) => {
   return (
-    <StyledHeroSection>
+    <StyledHeroSection id="hero">
       <LeftContainer>
         <h1>Welcome, I&apos;m</h1>
         <StyledBigTitle>{user.name}</StyledBigTitle>
@@ -24,18 +25,7 @@ const Hero = ({ user = {} }) => {
       <RightContainer>
         <StyledPic>
           <div className="wrapper">
-            <img
-              alt=""
-              width={300}
-              height={300}
-              src={
-                user?.github?.avatar_url ||
-                user?.hashnode?.photo ||
-                user?.devto?.profile_image ||
-                '/default-avatar.png'
-              }
-              className="img"
-            />
+            <img alt="" width={300} height={300} src={getAvatar(user)} className="img" />
           </div>
         </StyledPic>
         <Social className="social-networks" />

@@ -1,17 +1,48 @@
-import styled from 'styled-components';
+import styled, { css } from 'styled-components';
 import { tint } from '@utils';
+import { ifProp, prop } from 'styled-tools';
 
 export const StyledAboutSection = styled.section`
   max-width: 100%;
 `;
 
+export const Container = styled.div`
+  position: relative;
+`;
+
+export const EditContainer = styled.div`
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+`;
+
+export const EditActions = styled.div`
+  display: flex;
+  width: 100%;
+  justify-content: flex-end;
+  margin: 2rem 0;
+  button {
+    margin-left: 2rem;
+    ${prop('theme.mixins.bigButton')};
+  }
+  .cancel-button {
+    border-width: 0px;
+    color: ${prop('theme.text.default')};
+  }
+`;
+
 export const StyledMarkdown = styled.div`
   font-size: ${(props) => props.theme.fontSize.lg};
   text-align: left;
+  ${ifProp(
+    'isGenerator',
+    css`
+      padding-top: 3rem;
+    `,
+  )}
   img {
     max-width: 100%;
   }
-
   h1,
   h2,
   h3,
@@ -45,26 +76,28 @@ export const StyledMarkdown = styled.div`
   ul,
   ol {
     display: grid;
-    grid-template-columns: repeat(5, minmax(140px, 200px));
+    grid-template-columns: 1fr;
     padding: 0;
     margin: 2rem 0;
     overflow: hidden;
     list-style: none;
 
-    @media (max-width: ${(props) => props.theme.breakpoints.sm}) {
-      grid-template-columns: repeat(2, minmax(140px, 200px));
-    }
-
     li {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
       position: relative;
-      margin-bottom: 10px;
+      margin-bottom: 2.5rem;
       padding-left: 20px;
       font-family: ${(props) => props.theme.fontFamily.fontMono};
-      font-size: ${(props) => props.theme.fontSize.sm};
+      font-size: ${(props) => props.theme.fontSize.md};
       color: ${(props) => props.theme.text.accent};
+      * {
+        font-size: ${(props) => props.theme.fontSize.md};
+      }
       img {
         display: flex;
-        margin: 10px 0;
+        margin: 0.5rem;
       }
       &:before {
         content: '▹';

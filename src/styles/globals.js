@@ -7,6 +7,9 @@ export default createGlobalStyle`
   1.  Base styles
   -------------------------------------------------------------------------------
   */
+  :root {
+    --colors-primary: #1ee0e0;
+  }
   * {
     border: 0;
     box-sizing: inherit;
@@ -45,12 +48,7 @@ export default createGlobalStyle`
 
   @media (min-width: 1600px) {
     html {
-        font-size: 75%;
-    }
-  }
-  @media (min-width: 1920px) {
-    html {
-        font-size: 87.5%;
+        font-size: 60%;
     }
   }
 

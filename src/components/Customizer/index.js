@@ -1,14 +1,14 @@
 import { useState, useRef, useCallback } from 'react';
 import { Setting, CloseSquare } from 'react-iconly';
-import { useOnClickOutside, useBodyScroll } from '@hooks';
+import { useOnClickOutside, useBodyScroll, useChangeRootColor } from '@hooks';
 import { useForm } from 'react-hook-form';
 import { Input, Switch } from '@components';
 import { isEmpty } from 'lodash';
-import fetchAPI from '@lib/fetch-api';
 import { useToasts } from '@contexts/toasts';
 import { useUserDataContext } from '@contexts/user-data';
-import { useCustomizerContext } from '@contexts/customizer';
 import rules from '@common/rules';
+import { upsertUser } from '@services/user';
+
 import ColorPicker from './color-picker';
 import { CustomizerContainer, CustomizerToggle } from './styles';
 
@@ -19,8 +19,7 @@ const Customizer = () => {
   const [, setBodyHidden] = useBodyScroll(null, { scrollLayer: true });
   const { ToastsType, addToastWithTimeout } = useToasts();
   const { user, updateValue: updateUserData } = useUserDataContext();
-  const { primaryColor, updateValue } = useCustomizerContext();
-  const [localColor, setLocalColor] = useState(() => primaryColor);
+  const [localColor, setLocalColor] = useState(user.primaryColor || '#1ee0e0');
 
   const { register, handleSubmit, formState, errors } = useForm({
     mode: 'onBlur',
@@ -50,7 +49,7 @@ const Customizer = () => {
     (color) => {
       setLocalColor(color);
       setTimeout(() => {
-        updateValue({ primaryColor: color });
+        useChangeRootColor(color);
       }, 100);
     },
     [localColor],
@@ -76,32 +75,24 @@ const Customizer = () => {
     user.ga = input.ga;
     user.primaryColor = input.primaryColor;
     updateUserData(user);
-    fetchAPI('/user', {
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      method: 'POST',
-      body: JSON.stringify(input),
-      throwOnHTTPError: true,
-    })
-      .then((res) => {
-        setLoading(false);
-        setOpen(false);
-        setBodyHidden(false);
-        if (res.success) {
-          addToastWithTimeout(ToastsType.SUCCESS, 'Profile Saved');
-        } else {
-          addToastWithTimeout(ToastsType.ERROR, 'Something went wrong, try again later');
-        }
-      })
-      .catch((err) => {
-        console.error(err);
-        setLoading(false);
-        setOpen(false);
-        setBodyHidden(false);
+
+    try {
+      const res = await upsertUser(input);
+      setLoading(false);
+      setOpen(false);
+      setBodyHidden(false);
+      if (res.success) {
+        addToastWithTimeout(ToastsType.SUCCESS, 'Profile Saved');
+      } else {
         addToastWithTimeout(ToastsType.ERROR, 'Something went wrong, try again later');
-      });
+      }
+    } catch (error) {
+      console.error(error);
+      setLoading(false);
+      setOpen(false);
+      setBodyHidden(false);
+      addToastWithTimeout(ToastsType.ERROR, 'Something went wrong, try again later');
+    }
   };
 
   return (

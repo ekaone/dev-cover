@@ -2,20 +2,18 @@ import { useState, useEffect } from 'react';
 import { UserNotFoundView, PortfolioView } from '@views';
 import { withRouter } from 'next/router';
 import PropTypes from 'prop-types';
+import { useChangeRootColor } from '@hooks';
 import { LoaderContainer, Loader } from '@common/styles';
 import buildUser from '@lib/user-builder';
 import { isEnabledUser } from '@utils/user-mapping';
-import { IS_GENERATOR } from '@lib/constants';
-
-const username = process.env.NEXT_PUBLIC_USERNAME;
-const isLivePortfolio = username && !IS_GENERATOR;
+import { IS_PORTFOLIO } from '@lib/constants';
 
 export async function getStaticPaths() {
   return { paths: [], fallback: true };
 }
 
 export async function getStaticProps({ params }) {
-  if (isLivePortfolio) {
+  if (IS_PORTFOLIO) {
     return { notFound: true };
   }
   try {
@@ -45,15 +43,16 @@ const PortfolioPage = ({ router, user }) => {
   }, []);
   if (router.isFallback) {
     return (
-      <LoaderContainer height="100vh">
+      <LoaderContainer height="90vh">
         <Loader mb="1rem" />
-        {!isLivePortfolio && <h1>{loaderText}</h1>}
+        {!IS_PORTFOLIO && <h1>{loaderText}</h1>}
       </LoaderContainer>
     );
   }
   if (!router.isFallback && !isEnabledUser(user)) {
     return <UserNotFoundView username={user?.username} />;
   }
+  useChangeRootColor(user.primaryColor);
   return <PortfolioView user={user} />;
 };
 

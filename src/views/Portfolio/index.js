@@ -4,22 +4,22 @@ import { StyledMainContainer } from '@common/styles';
 import PropTypes from 'prop-types';
 import { useUserDataContext } from '@contexts/user-data';
 import { useUIContext } from '@contexts/ui';
-import { IS_GENERATOR } from '@lib/constants';
+import { IS_PORTFOLIO, IS_GENERATOR } from '@lib/constants';
 import { useToasts } from '@contexts/toasts';
 import { get } from 'lodash';
 
-const username = process.env.NEXT_PUBLIC_USERNAME;
-const isLivePortfolio = username && !IS_GENERATOR;
-
-const PortfolioView = ({ user }) => {
+const PortfolioView = ({ user, isPreview = false }) => {
   const { user: userContext, updateValue } = useUserDataContext();
   const { ToastsType, addToastWithTimeout } = useToasts();
   const { restartValues, updateValue: updateUI } = useUIContext();
-  const userData = isLivePortfolio ? user : userContext;
+  const isEditable = !(IS_PORTFOLIO || isPreview);
+  const userData = !isEditable ? user : userContext;
+
   useEffect(() => {
     restartValues();
-    updateUI({ showDeployButton: true, showCustomizer: true });
-  }, []);
+    updateUI({ isEditable, showDeployButton: IS_GENERATOR, showCustomizer: isEditable });
+  }, [isEditable]);
+
   useEffect(() => {
     if (user) {
       updateValue(user);
@@ -31,7 +31,7 @@ const PortfolioView = ({ user }) => {
   return (
     <StyledMainContainer className="fillHeight">
       {userData && <Hero user={userData} />}
-      {userData?.hasReadme && userData?.hasGithub && <About user={userData} />}
+      {userData?.hasReadme && <About user={userData} />}
       {userData?.hasPosts && <Blog user={userData} />}
       {userData?.hasRepos && <Projects user={userData} />}
       {(userData.email || userData.isHireable) && <Contact user={userData} />}
@@ -41,6 +41,7 @@ const PortfolioView = ({ user }) => {
 
 PortfolioView.propTypes = {
   user: PropTypes.object,
+  isPreview: PropTypes.bool,
 };
 
 export default PortfolioView;

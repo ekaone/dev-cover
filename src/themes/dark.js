@@ -1,10 +1,10 @@
 import common from './common';
 
-const lightTheme = {
+const darkTheme = {
   ...common,
   bg: {
     default: '#120E26',
-    defaultLight: '#112536',
+    defaultLight: '#21184D',
     reverse: '#F4F4F4',
   },
   text: {
@@ -30,4 +30,4 @@ const lightTheme = {
   },
 };
 
-export default lightTheme;
+export default darkTheme;
